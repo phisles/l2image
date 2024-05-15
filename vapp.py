@@ -11,6 +11,8 @@ import os
 import glob
 import spacy
 from collections import Counter
+import whisper
+from datetime import timedelta
 
 # Ignore specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
@@ -32,6 +34,9 @@ def load_model():
 
 model, tokenizer = load_model()
 feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+
+# Load Whisper model
+whisper_model = whisper.load_model("base")
 
 def generate_caption(image):
     image_tensor = feature_extractor(images=[image], return_tensors="pt").pixel_values.to(device)
@@ -110,7 +115,14 @@ def remove_infrequent_nouns(caption, common_nouns, rare_nouns):
     filtered_caption = ' '.join([token.text for token in doc if token.pos_ != 'NOUN' or (token.text.lower() in common_nouns and token.text.lower() not in rare_nouns)])
     return filtered_caption
 
-st.title('Video Captioning App')
+def extract_transcript(video_path):
+    result = whisper_model.transcribe(video_path)
+    return result["segments"]
+
+def format_timedelta(seconds):
+    return str(timedelta(seconds=seconds)).split(".")[0]
+
+st.title('Video Captioning and Transcription App')
 uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
 
 # Variable to control the number of frames per second to extract
@@ -179,3 +191,37 @@ if uploaded_file is not None:
     # Display filtered captions
     st.markdown("## Filtered Captions")
     st.text_area("Filtered Captions", filtered_caption_text, height=200)
+    
+    # Extract transcript using Whisper
+    transcript_segments = extract_transcript(tfile.name)
+    
+    # Combine captions and transcripts based on time
+    combined_text = []
+    for segment in transcript_segments:
+        start_time = format_timedelta(segment['start'])
+        end_time = format_timedelta(segment['end'])
+        text = segment['text']
+        combined_text.append(f"{start_time} - {end_time}: {text}")
+        
+    combined_text = "\n".join(combined_text)
+
+    st.markdown("## Transcript")
+    st.text_area("Transcript", combined_text, height=300)
+    
+    # Interlace transcripts and captions
+    interlaced_text = []
+    i = j = 0
+    while i < len(transcript_segments) and j < len(timestamps):
+        ts = timestamps[j]
+        segment = transcript_segments[i]
+        start_time = format_timedelta(segment['start'])
+        if ts <= start_time:
+            interlaced_text.append(f"{ts} - {filtered_captions[j]}")
+            j += 1
+        else:
+            interlaced_text.append(f"{start_time} - {segment['text']}")
+            i += 1
+            
+    interlaced_text = "\n".join(interlaced_text)
+    st.markdown("## Interlaced Captions and Transcript")
+    st.text_area("Interlaced", interlaced_text, height=300)
