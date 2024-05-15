@@ -9,12 +9,14 @@ import subprocess
 import json
 import os
 import glob
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
+import spacy
+from collections import Counter
 
 # Ignore specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
+
+# Load spaCy model
+nlp = spacy.load("en_core_web_sm")
 
 # Setting up the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -99,15 +101,14 @@ def extract_frames(video_path, fps_target=1.0):
     
     return frames, frame_interval_sec, duration
 
-def filter_captions(captions, threshold=0.1):
-    vectorizer = TfidfVectorizer().fit_transform(captions)
-    vectors = vectorizer.toarray()
-    cosine_matrix = cosine_similarity(vectors)
-    
-    mean_similarities = cosine_matrix.mean(axis=1)
-    filtered_captions = [captions[i] for i, mean_similarity in enumerate(mean_similarities) if mean_similarity > threshold]
-    
-    return filtered_captions
+def extract_nouns(caption):
+    doc = nlp(caption)
+    return [token.text.lower() for token in doc if token.pos_ == 'NOUN']
+
+def remove_infrequent_nouns(caption, common_nouns, rare_nouns):
+    doc = nlp(caption)
+    filtered_caption = ' '.join([token.text for token in doc if token.pos_ != 'NOUN' or (token.text.lower() in common_nouns and token.text.lower() not in rare_nouns)])
+    return filtered_caption
 
 st.title('Video Captioning App')
 uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
@@ -152,16 +153,28 @@ if uploaded_file is not None:
     st.markdown("## Initial Captions")
     st.text_area("Initial Captions", initial_caption_text, height=200)
 
-    # Filter captions
-    filtered_captions = filter_captions(initial_captions, threshold=0.1)
+    # Extract nouns from all captions
+    all_nouns = []
+    for caption in initial_captions:
+        all_nouns.extend(extract_nouns(caption))
+
+    # Determine common and rare nouns
+    noun_counts = Counter(all_nouns)
+    common_nouns = {noun for noun, count in noun_counts.items() if count > 1}
+    rare_nouns = {noun for noun, count in noun_counts.items() if count == 1}
+
+    # Filter captions by removing infrequent nouns
+    filtered_captions = [remove_infrequent_nouns(caption, common_nouns, rare_nouns) for caption in initial_captions]
 
     # Debugging information
-    st.write("Filtered Captions after thresholding:", filtered_captions)
+    st.write("Common Nouns:", common_nouns)
+    st.write("Rare Nouns:", rare_nouns)
     st.write("Initial Captions:", initial_captions)
+    st.write("Filtered Captions after removing infrequent nouns:", filtered_captions)
     st.write("Timestamps:", timestamps)
 
     # Update full_caption string with filtered captions
-    filtered_caption_text = "\n".join([f"{timestamps[i]} - {caption}" for i, caption in enumerate(initial_captions) if caption in filtered_captions])
+    filtered_caption_text = "\n".join([f"{timestamps[i]} - {filtered_captions[i]}" for i in range(len(filtered_captions))])
     
     # Display filtered captions
     st.markdown("## Filtered Captions")
