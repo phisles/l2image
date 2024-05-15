@@ -9,6 +9,9 @@ import subprocess
 import json
 import os
 import glob
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
 # Ignore specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
@@ -31,10 +34,12 @@ feature_extractor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image
 def generate_caption(image):
     image_tensor = feature_extractor(images=[image], return_tensors="pt").pixel_values.to(device)
     gen_kwargs = {
-        "max_length": 32,
-        "min_length": 20,
-        "num_beams": 8,
-        "no_repeat_ngram_size": 2
+        "max_length": 50,
+        "min_length": 32,
+        "num_beams": 10,
+        "no_repeat_ngram_size": 2,
+        "length_penalty": 1.0,
+        "early_stopping": True
     }
     output_ids = model.generate(image_tensor, **gen_kwargs)
     caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
@@ -51,11 +56,6 @@ def get_video_info(video_path):
     ]
     result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     
-    # Debugging information
-    st.write("FFprobe command:", " ".join(command))
-    st.write("FFprobe stdout:", result.stdout)
-    st.write("FFprobe stderr:", result.stderr)
-    
     if result.returncode != 0:
         st.error("FFprobe command failed.")
         return None
@@ -64,9 +64,6 @@ def get_video_info(video_path):
         info = json.loads(result.stdout)
     except json.JSONDecodeError as e:
         st.error("JSON decoding failed.")
-        st.write("Error message:", e.msg)
-        st.write("Error at:", e.pos)
-        st.write("Raw output:", result.stdout)
         return None
     
     return info
@@ -102,6 +99,16 @@ def extract_frames(video_path, fps_target=1.0):
     
     return frames, frame_interval_sec, duration
 
+def filter_captions(captions, threshold=0.1):
+    vectorizer = TfidfVectorizer().fit_transform(captions)
+    vectors = vectorizer.toarray()
+    cosine_matrix = cosine_similarity(vectors)
+    
+    mean_similarities = cosine_matrix.mean(axis=1)
+    filtered_captions = [captions[i] for i, mean_similarity in enumerate(mean_similarities) if mean_similarity > threshold]
+    
+    return filtered_captions
+
 st.title('Video Captioning App')
 uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
 
@@ -112,8 +119,7 @@ if uploaded_file is not None:
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.read())
     tfile.close()  # Ensure the file is closed and written completely
-    st.write(f"Temporary video file path: {tfile.name}")
-    st.write(f"File exists: {os.path.exists(tfile.name)}")
+    
     frames, time_interval, duration = extract_frames(tfile.name, fps_target=fps_target)
     
     st.write(f"Total video duration: {duration:.2f} seconds")
@@ -121,12 +127,13 @@ if uploaded_file is not None:
     st.write(f"Expected number of frames: {expected_frames}")
     st.write(f"Extracted {len(frames)} frames from the video.")
     
-    captions = []
-    
-    # Define number of columns
+    initial_captions = []
+    timestamps = []
+
+    # Define columns for images
     num_columns = 3
     columns = st.columns(num_columns)
-    
+
     for i, frame in enumerate(frames):
         col = columns[i % num_columns]
         with col:
@@ -136,9 +143,26 @@ if uploaded_file is not None:
             st.image(frame, caption=f'Time: {minutes:02}:{seconds:02}', use_column_width=True)
             with st.spinner(f'Generating caption for frame {i+1}...'):
                 caption = generate_caption(frame)
+                initial_captions.append(caption)
+                timestamps.append(f"{minutes:02}:{seconds:02}")
                 st.write(f"{minutes:02}:{seconds:02} - {caption}")
-                captions.append(caption)
+
+    # Show initial captions
+    initial_caption_text = "\n".join([f"{timestamps[i]} - {initial_captions[i]}" for i in range(len(initial_captions))])
+    st.markdown("## Initial Captions")
+    st.text_area("Initial Captions", initial_caption_text, height=200)
+
+    # Filter captions
+    filtered_captions = filter_captions(initial_captions, threshold=0.1)
+
+    # Debugging information
+    st.write("Filtered Captions after thresholding:", filtered_captions)
+    st.write("Initial Captions:", initial_captions)
+    st.write("Timestamps:", timestamps)
+
+    # Update full_caption string with filtered captions
+    filtered_caption_text = "\n".join([f"{timestamps[i]} - {caption}" for i, caption in enumerate(initial_captions) if caption in filtered_captions])
     
-    # Optional: Summarize the captions using an LLM (not implemented in this code)
-    # summary = summarize_captions(captions)
-    # st.write("Video Summary:", summary)
+    # Display filtered captions
+    st.markdown("## Filtered Captions")
+    st.text_area("Filtered Captions", filtered_caption_text, height=200)
