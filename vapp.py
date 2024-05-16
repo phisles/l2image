@@ -13,6 +13,7 @@ import spacy
 from collections import Counter
 import whisper
 from datetime import timedelta
+import ollama  # Import the Ollama client
 
 # Ignore specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
@@ -127,6 +128,33 @@ def convert_to_seconds(timestamp):
     parts = list(map(int, parts))
     return parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
 
+def generate_feedback(transcript_segments, interlaced_text):
+    # Prepare the combined text
+    combined_text = ". ".join([f"{segment['start']} - {segment['text']}" for segment in transcript_segments])
+    prompt_text = f"""
+    You are an analyst reviewing videos from interivews and body worn cameras. You are being provided with transcripts (t) and image captions (c).
+    You will review these and summarize what happens in the video, providing details and context based on the captions and transcript.
+    Some of the captions willm be incorrect, so you must infer what is happening in the frames by reviewing all of the captions
+    Generate your response by aligning the captions and transcript, to tell a reviewer what happens in the video
+
+    Format your response with:
+    - A short sentence overview of what happens
+    - Bullet points of key moments and succinct descriptions
+    - Ensure to use concise language
+
+    Here is the interlaced text:
+    {interlaced_text}
+    """
+
+    # Sending the prompt to LLaMA
+    response = ollama.chat(
+        model='llama3',
+        messages=[{'role': 'user', 'content': prompt_text}]
+    )
+
+    # Extracting the content from the response
+    return response['message']['content']
+
 st.title('Video Captioning and Transcription App')
 uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
 
@@ -137,14 +165,14 @@ if uploaded_file is not None:
     tfile = tempfile.NamedTemporaryFile(delete=False)
     tfile.write(uploaded_file.read())
     tfile.close()  # Ensure the file is closed and written completely
-    
+
     frames, time_interval, duration = extract_frames(tfile.name, fps_target=fps_target)
-    
+
     st.write(f"Total video duration: {duration:.2f} seconds")
     expected_frames = int(duration * fps_target)
     st.write(f"Expected number of frames: {expected_frames}")
     st.write(f"Extracted {len(frames)} frames from the video.")
-    
+
     initial_captions = []
     timestamps = []
 
@@ -191,14 +219,14 @@ if uploaded_file is not None:
 
     # Update full_caption string with filtered captions
     filtered_caption_text = "\n".join([f"{timestamps[i]} - {filtered_captions[i]}" for i in range(len(filtered_captions))])
-    
+
     # Display filtered captions
     st.markdown("## Filtered Captions")
     st.text_area("Filtered Captions", filtered_caption_text, height=200)
-    
+
     # Extract transcript using Whisper
     transcript_segments = extract_transcript(tfile.name)
-    
+
     # Combine captions and transcripts based on time
     combined_text = []
     for segment in transcript_segments:
@@ -206,12 +234,12 @@ if uploaded_file is not None:
         end_time = format_timedelta(segment['end'])
         text = segment['text']
         combined_text.append(f"{start_time} - {end_time}: {text}")
-        
+
     combined_text = "\n".join(combined_text)
 
     st.markdown("## Transcript")
     st.text_area("Transcript", combined_text, height=300)
-    
+
     # Interlace transcripts and captions
     interlaced_text = []
     i = j = 0
@@ -219,23 +247,48 @@ if uploaded_file is not None:
         ts_seconds = convert_to_seconds(timestamps[j])
         segment = transcript_segments[i]
         segment_start_seconds = segment['start']
-        
+
         if ts_seconds <= segment_start_seconds:
-            interlaced_text.append(f"{timestamps[j]} - {filtered_captions[j]}")
+            interlaced_text.append(f"c: {timestamps[j]} - {filtered_captions[j]}")
             j += 1
         else:
-            interlaced_text.append(f"{format_timedelta(segment_start_seconds)} - {segment['text']}")
+            interlaced_text.append(f"t: {format_timedelta(segment_start_seconds)} - {segment['text']}")
             i += 1
-    
+
     # Append any remaining captions or transcript segments
     while j < len(timestamps):
-        interlaced_text.append(f"{timestamps[j]} - {filtered_captions[j]}")
+        interlaced_text.append(f"c: {timestamps[j]} - {filtered_captions[j]}")
         j += 1
     while i < len(transcript_segments):
         segment = transcript_segments[i]
-        interlaced_text.append(f"{format_timedelta(segment['start'])} - {segment['text']}")
+        interlaced_text.append(f"t: {format_timedelta(segment['start'])} - {segment['text']}")
         i += 1
-    
+
     interlaced_text = "\n".join(interlaced_text)
     st.markdown("## Interlaced Captions and Transcript")
     st.text_area("Interlaced", interlaced_text, height=300)
+
+    # Generate feedback using the combined interlaced text and transcripts
+    feedback = generate_feedback(transcript_segments, interlaced_text)
+
+    # Container for feedback
+    feedback_container = st.empty()
+
+    # Convert special bullet points to Markdown bullets and ensure proper line breaks
+    feedback = feedback.replace('•', '-').replace('\n\n', '\n')  # Replace bullets and manage extra new lines
+
+    # Add extra line breaks before each bold section except the first
+    parts = feedback.split('**')
+    formatted_feedback = parts[0]  # Start with the first part that is before the first bold
+    for part in parts[1:]:  # Loop through parts after the first bold
+        if formatted_feedback.count('**') % 2 == 0:  # Check if we're at the start of bold text
+            formatted_feedback += '\n**' + part
+        else:
+            formatted_feedback += '**' + part
+
+    # Stream feedback directly (considering it's properly formatted now)
+    feedback_container.markdown(formatted_feedback, unsafe_allow_html=True)
+
+
+
+
