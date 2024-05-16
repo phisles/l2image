@@ -14,6 +14,11 @@ from collections import Counter
 import whisper
 from datetime import timedelta
 import ollama  # Import the Ollama client
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 
 st.set_page_config(layout="wide")
 
@@ -131,20 +136,25 @@ def convert_to_seconds(timestamp):
     return parts[0] * 3600 + parts[1] * 60 + parts[2] if len(parts) == 3 else parts[0] * 60 + parts[1]
 
 def generate_feedback(transcript_segments, interlaced_text):
-    # Prepare the combined text
-    combined_text = ". ".join([f"{segment['start']} - {segment['text']}" for segment in transcript_segments])
+    # Log the interlaced text
+    logging.info(f"Interlaced text:\n{interlaced_text}")
+
+    # Prepare the prompt text
     prompt_text = f"""
     You are a police analyst reviewing videos from police interviews and police body worn cameras. You are being provided with transcripts (t) and image captions (c).
     You will write a concise report including a summary, written in succinct, formal tone, describing what happens in the video. Use bullet points and concise paragraphs, providing details and context based on the captions and transcript.
-    
+
     Some of the captions will be incorrect because they are AI generated. Infer what is happening in the frames by reviewing all of the captions and
-    only mentioning specfic nouns or actions if they reoccur multiple times.
+    only mentioning specific nouns or actions if they reoccur multiple times.
 
     Generate your report by aligning the captions and transcript.
-    
+
     Here is the interlaced text:
     {interlaced_text}
     """
+
+    # Log the full prompt text
+    logging.info(f"Prompt text sent to LLaMA:\n{prompt_text}")
 
     # Sending the prompt to LLaMA
     response = ollama.chat(
@@ -153,7 +163,10 @@ def generate_feedback(transcript_segments, interlaced_text):
     )
 
     # Extracting the content from the response
-    return response['message']['content']
+    response_content = response['message']['content']
+    logging.info(f"LLaMA response:\n{response_content}")
+    return response_content
+
 
 st.title('Video Captioning and Transcription App')
 uploaded_file = st.file_uploader("Upload a video", type=["mp4", "mov", "avi"])
