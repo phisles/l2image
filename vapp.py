@@ -15,6 +15,8 @@ import whisper
 from datetime import timedelta
 import ollama  # Import the Ollama client
 
+st.set_page_config(layout="wide")
+
 # Ignore specific FutureWarning from huggingface_hub
 warnings.filterwarnings("ignore", category=FutureWarning, module='huggingface_hub.file_download')
 
@@ -132,16 +134,14 @@ def generate_feedback(transcript_segments, interlaced_text):
     # Prepare the combined text
     combined_text = ". ".join([f"{segment['start']} - {segment['text']}" for segment in transcript_segments])
     prompt_text = f"""
-    You are an analyst reviewing videos from interivews and body worn cameras. You are being provided with transcripts (t) and image captions (c).
-    You will review these and summarize what happens in the video, providing details and context based on the captions and transcript.
-    Some of the captions willm be incorrect, so you must infer what is happening in the frames by reviewing all of the captions
-    Generate your response by aligning the captions and transcript, to tell a reviewer what happens in the video
+    You are a police analyst reviewing videos from police interviews and police body worn cameras. You are being provided with transcripts (t) and image captions (c).
+    You will write a concise report including a summary, written in succinct, formal tone, describing what happens in the video. Use bullet points and concise paragraphs, providing details and context based on the captions and transcript.
+    
+    Some of the captions will be incorrect because they are AI generated. Infer what is happening in the frames by reviewing all of the captions and
+    only mentioning specfic nouns or actions if they reoccur multiple times.
 
-    Format your response with:
-    - A short sentence overview of what happens
-    - Bullet points of key moments and succinct descriptions
-    - Ensure to use concise language
-
+    Generate your report by aligning the captions and transcript.
+    
     Here is the interlaced text:
     {interlaced_text}
     """
