@@ -194,8 +194,6 @@ if uploaded_file is not None:
 
     # Show initial captions
     initial_caption_text = "\n".join([f"{timestamps[i]} - {initial_captions[i]}" for i in range(len(initial_captions))])
-    st.markdown("## Initial Captions")
-    st.text_area("Initial Captions", initial_caption_text, height=200)
 
     # Extract nouns from all captions
     all_nouns = []
@@ -210,19 +208,8 @@ if uploaded_file is not None:
     # Filter captions by removing infrequent nouns
     filtered_captions = [remove_infrequent_nouns(caption, common_nouns, rare_nouns) for caption in initial_captions]
 
-    # Debugging information
-    st.write("Common Nouns:", common_nouns)
-    st.write("Rare Nouns:", rare_nouns)
-    st.write("Initial Captions:", initial_captions)
-    st.write("Filtered Captions after removing infrequent nouns:", filtered_captions)
-    st.write("Timestamps:", timestamps)
-
     # Update full_caption string with filtered captions
     filtered_caption_text = "\n".join([f"{timestamps[i]} - {filtered_captions[i]}" for i in range(len(filtered_captions))])
-
-    # Display filtered captions
-    st.markdown("## Filtered Captions")
-    st.text_area("Filtered Captions", filtered_caption_text, height=200)
 
     # Extract transcript using Whisper
     transcript_segments = extract_transcript(tfile.name)
@@ -236,9 +223,6 @@ if uploaded_file is not None:
         combined_text.append(f"{start_time} - {end_time}: {text}")
 
     combined_text = "\n".join(combined_text)
-
-    st.markdown("## Transcript")
-    st.text_area("Transcript", combined_text, height=300)
 
     # Interlace transcripts and captions
     interlaced_text = []
@@ -265,30 +249,27 @@ if uploaded_file is not None:
         i += 1
 
     interlaced_text = "\n".join(interlaced_text)
-    st.markdown("## Interlaced Captions and Transcript")
-    st.text_area("Interlaced", interlaced_text, height=300)
+
+
+    # Define fourth and fifth columns for additional information
+    col4, col5 = st.columns(2)
+
+    with col4:
+        st.markdown("## Initial Captions")
+        st.text_area("Initial Captions", initial_caption_text, height=200)
+
+        st.markdown("## Filtered Captions")
+        st.text_area("Filtered Captions", filtered_caption_text, height=200)
+
+        st.markdown("## Transcript")
+        st.text_area("Transcript", combined_text, height=300)
+
+        st.markdown("## Interlaced Captions and Transcript")
+        st.text_area("Interlaced", interlaced_text, height=300)
 
     # Generate feedback using the combined interlaced text and transcripts
     feedback = generate_feedback(transcript_segments, interlaced_text)
 
-    # Container for feedback
-    feedback_container = st.empty()
-
-    # Convert special bullet points to Markdown bullets and ensure proper line breaks
-    feedback = feedback.replace('•', '-').replace('\n\n', '\n')  # Replace bullets and manage extra new lines
-
-    # Add extra line breaks before each bold section except the first
-    parts = feedback.split('**')
-    formatted_feedback = parts[0]  # Start with the first part that is before the first bold
-    for part in parts[1:]:  # Loop through parts after the first bold
-        if formatted_feedback.count('**') % 2 == 0:  # Check if we're at the start of bold text
-            formatted_feedback += '\n**' + part
-        else:
-            formatted_feedback += '**' + part
-
-    # Stream feedback directly (considering it's properly formatted now)
-    feedback_container.markdown(formatted_feedback, unsafe_allow_html=True)
-
-
-
-
+    with col5:
+        st.markdown("## LLaMA3 Output")
+        st.text_area("LLaMA3 Output", feedback, height=800)
