@@ -139,15 +139,19 @@ def generate_feedback(transcript_segments, interlaced_text):
     # Log the interlaced text
     logging.info(f"Interlaced text:\n{interlaced_text}")
 
-    # Prepare the prompt text
+    # Prepare the improved prompt text
     prompt_text = f"""
-    You are a police analyst reviewing videos from police interviews and police body worn cameras. You are being provided with transcripts (t) and image captions (c).
-    You will write a concise report including a summary, written in succinct, formal tone, describing what happens in the video. Use bullet points and concise paragraphs, providing details and context based on the captions and transcript.
+    You are a police analyst tasked with reviewing videos from police interviews and body-worn cameras. You will be provided with transcripts (t) and image captions (c). Your goal is to write a detailed, cohesive, and formal report that accurately describes the specific incident recorded in the video.
 
-    Some of the captions will be incorrect because they are AI generated. Infer what is happening in the frames by reviewing all of the captions and
-    only mentioning specific nouns or actions if they reoccur multiple times.
+    Instructions:
+    1. Review the provided transcripts and image captions.
+    2. Summarize the events of the specific incident in the video using formal language.
+    3. Provide a detailed description of the actions, interactions, and context based on the captions and transcripts.
+    4. Only mention specific nouns or actions if they reoccur multiple times in the captions to avoid false positives.
+    5. Do not include opinions, suggestions for further investigation, or general observations.
+    6. Interpret the captions and transcripts as if you are reviewing body-worn camera footage from a specific incident involving a police officer.
 
-    Generate your report by aligning the captions and transcript.
+    Generate your report by aligning the captions and transcript to describe the specific incident.
 
     Here is the interlaced text:
     {interlaced_text}
