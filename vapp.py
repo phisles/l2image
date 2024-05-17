@@ -19,7 +19,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-
 st.set_page_config(layout="wide")
 
 # Ignore specific FutureWarning from huggingface_hub
@@ -49,16 +48,18 @@ whisper_model = whisper.load_model("large")
 def generate_caption(image):
     image_tensor = feature_extractor(images=[image], return_tensors="pt").pixel_values.to(device)
     gen_kwargs = {
-        "max_length": 50,
-        "min_length": 32,
-        "num_beams": 10,
-        "no_repeat_ngram_size": 2,
-        "length_penalty": 1.0,
+        "max_length": 15,  # Further reduced maximum length
+        "min_length": 5,   # Further reduced minimum length
+        "num_beams": 15,   # Further increased number of beams for better accuracy
+        "no_repeat_ngram_size": 1,
+        "length_penalty": 2.0,  # Increased penalty for longer captions
         "early_stopping": True
     }
     output_ids = model.generate(image_tensor, **gen_kwargs)
     caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     return caption.strip()
+
+
 
 def get_video_info(video_path):
     command = [
@@ -141,17 +142,24 @@ def generate_feedback(transcript_segments, interlaced_text):
 
     # Prepare the improved prompt text
     prompt_text = f"""
-    You are a police analyst tasked with reviewing videos from police interviews and body-worn cameras. You will be provided with transcripts (t) and image captions (c). Your goal is to write a detailed, cohesive, and formal report that accurately describes the specific incident recorded in the video.
+    Review the combined transcripts (t), image captions (c), and corresponding time codes ('interlaced text') from a video recording of a single incident.
+    Each caption represents a single frame of the video. Each video encapsulates one incident. Videos are usually body worn camera footage or interview room recordings.
+    Some captions will be incorrect so you must look at the captions as a whole to infer the narrative of the described frames.
 
     Instructions:
+    Infer the context and overall narrative of the incident by reviewing the captions and transcript.
+    Write a detailed, cohesive, and formal report that accurately describes the specific incident recorded in the video.
+    Your report will tell the narrative of the incident using the provided information.
+    
+    Write your entire response in the tone and style of a police officer writing an incident report for their department's records.
+    Do not refer to the captions in the report--use the captions to tell the overall narrative by comparing them to the transcript.
+    Do not tell the reader that you need more information--make your best estimated guess.
+    
     1. Review the provided transcripts and image captions.
     2. Summarize the events of the specific incident in the video using formal language.
     3. Provide a detailed description of the actions, interactions, and context based on the captions and transcripts.
-    4. Only mention specific nouns or actions if they reoccur multiple times in the captions to avoid false positives.
+    4. To avoid false positives, only mention specific nouns or actions if they reoccur multiple times in the captions.
     5. Do not include opinions, suggestions for further investigation, or general observations.
-    6. Interpret the captions and transcripts as if you are reviewing body-worn camera footage from a specific incident involving a police officer.
-
-    Generate your report by aligning the captions and transcript to describe the specific incident.
 
     Here is the interlaced text:
     {interlaced_text}
