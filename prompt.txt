@@ -1,0 +1,43 @@
+def generate_feedback(transcript_segments, interlaced_text):
+    # Log the interlaced text
+    logging.info(f"Interlaced text:\n{interlaced_text}")
+
+    # Prepare the improved prompt text
+    prompt_text = f"""
+    Review the combined transcripts (t), image fashion captions (c), and corresponding time codes ('interlaced text') from a video recording of a single incident.
+    Each caption represents a single frame of the video. Each video encapsulates one incident. Videos are usually body worn camera footage or interview room recordings.
+    Some captions will be incorrect so you must look at the captions as a whole to infer the narrative of the described frames.
+
+    Instructions:
+    Infer the context and overall narrative of the incident by reviewing the captions and transcript.
+    Use the captions to describe what individuals are wearing.
+    Write a detailed, cohesive, and formal report that accurately describes the specific incident recorded in the video.
+    Your report will tell the narrative of the incident using the provided information.
+    
+    Write your entire response in the tone and style of a police officer writing an incident report for their department's records.
+    Do not refer to the captions in the report--use the captions to tell the overall narrative by comparing them to the transcript.
+    Do not tell the reader that you need more information--make your best estimated guess.
+    
+    1. Review the provided transcripts and image captions.
+    2. Summarize the events of the specific incident in the video using formal language.
+    3. Provide a detailed description of the actions, interactions, and context based on the captions and transcripts.
+    4. To avoid false positives, only mention specific nouns or actions if they reoccur multiple times in the captions.
+    5. Do not include opinions, suggestions for further investigation, or general observations.
+
+    Here is the interlaced text:
+    {interlaced_text}
+    """
+
+    # Log the full prompt text
+    logging.info(f"Prompt text sent to LLaMA:\n{prompt_text}")
+
+    # Sending the prompt to LLaMA
+    response = ollama.chat(
+        model='llama3',
+        messages=[{'role': 'user', 'content': prompt_text}]
+    )
+
+    # Extracting the content from the response
+    response_content = response['message']['content']
+    logging.info(f"LLaMA response:\n{response_content}")
+    return response_content
